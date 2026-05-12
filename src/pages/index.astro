@@ -1,0 +1,2524 @@
+---
+import {
+  BarChart3,
+  Database,
+  Download,
+  FileSpreadsheet,
+  Filter,
+  Globe2,
+  Leaf,
+  Maximize2,
+  Minimize2,
+  Moon,
+  Search,
+  ShieldCheck,
+  Table2,
+} from "lucide-astro";
+
+const pathPage = Astro.url.pathname.replace(/^\/|\/$/g, "");
+const currentPage = pathPage === "cases" || pathPage === "data" ? pathPage : "atlas";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Environmental prosecution database explorer with SQLite search, circuit geography, and animated globe analytics."
+    />
+    <title>Environmental Enforcement Atlas</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23111621'/%3E%3Cpath d='M47 14c-16 2-28 12-30 27 12 0 25-8 30-27Z' fill='%2342a5f5'/%3E%3Cpath d='M18 46c8-11 15-17 27-26' stroke='%23ffb74d' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+  </head>
+  <body data-page={currentPage}>
+    <main class="app-shell">
+      <aside class="sidebar" id="dataSection" aria-label="Database controls">
+        <div class="brand">
+          <div class="brand-mark"><Leaf size={22} /></div>
+          <div>
+            <p class="eyebrow">SQLite case explorer</p>
+            <h1>Environmental Enforcement Atlas</h1>
+          </div>
+        </div>
+
+        <section class="panel compact workbook-panel">
+          <div class="panel-title">
+            <Database size={18} />
+            <span>Loaded Workbook</span>
+          </div>
+          <dl class="meta-grid" id="metaGrid">
+            <div><dt>Cases</dt><dd>...</dd></div>
+            <div><dt>Years</dt><dd>...</dd></div>
+            <div><dt>Sheets</dt><dd>...</dd></div>
+            <div><dt>Indexed</dt><dd>FTS5</dd></div>
+          </dl>
+        </section>
+
+        <section class="panel compact export-panel">
+          <div class="panel-title">
+            <FileSpreadsheet size={18} />
+            <span>Spreadsheet Export</span>
+          </div>
+          <p class="panel-copy">
+            Download clean CSV files directly from the SQLite database for Excel, Sheets, or archive review.
+          </p>
+          <div class="export-actions">
+            <a class="export-button primary" href="/api/export?type=cases">
+              <Download size={17} />
+              <span>All cases CSV</span>
+            </a>
+            <a class="export-button" href="/api/export?type=districts">
+              <BarChart3 size={17} />
+              <span>District summary</span>
+            </a>
+            <a class="export-button" href="/api/export?type=categories">
+              <ShieldCheck size={17} />
+              <span>Category summary</span>
+            </a>
+            <a class="export-button" href="/api/export?type=sheets">
+              <Database size={17} />
+              <span>Workbook sheets</span>
+            </a>
+          </div>
+        </section>
+
+        <section class="panel compact category-panel">
+          <div class="panel-title">
+            <ShieldCheck size={18} />
+            <span>Category Flags</span>
+          </div>
+          <div id="categoryBars" class="bars" aria-live="polite"></div>
+        </section>
+
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div class="search-wrap">
+            <Search size={18} />
+            <input
+              id="searchInput"
+              autocomplete="off"
+              placeholder="Search charges, districts, countries, animals/species, notes, case IDs..."
+              type="search"
+            />
+          </div>
+          <nav class="page-tabs" aria-label="Page sections">
+            <button type="button" data-jump="atlas">Atlas</button>
+            <button type="button" data-jump="cases">Cases</button>
+            <button type="button" data-jump="data">Data</button>
+          </nav>
+          <div class="mode-tabs" role="tablist" aria-label="Map mode">
+            <button class="active" data-mode="both" type="button">Both</button>
+            <button data-mode="districts" type="button">Districts</button>
+            <button data-mode="countries" type="button">Countries</button>
+          </div>
+          <button id="themeToggle" class="icon-button" type="button" title="Toggle theme">
+            <Moon size={18} />
+          </button>
+        </header>
+
+        <div id="searchPopover" class="search-popover" hidden>
+          <div class="search-popover-header">
+            <div>
+              <p class="eyebrow">Case search</p>
+              <h2 id="searchOverlayTitle">Search cases</h2>
+            </div>
+            <div class="result-tools">
+              <span id="searchOverlayCount">Type to search</span>
+              <Table2 size={18} />
+            </div>
+            <button id="searchClose" class="icon-button" type="button" title="Close search">×</button>
+          </div>
+          <div id="searchOverlayResults" class="results search-overlay-results" aria-live="polite"></div>
+        </div>
+
+        <section class="hero-grid" id="atlasSection">
+          <div class="globe-stage" aria-label="Animated globe">
+            <div class="globe-header">
+              <div>
+                <p class="eyebrow">Geography</p>
+                <h2 id="mapTitle">District and circuit density</h2>
+              </div>
+              <div class="globe-controls">
+                <div class="metric-pill">
+                  <Globe2 size={17} />
+                  <span id="geoCount">...</span>
+                </div>
+                <button
+                  id="globeFullscreen"
+                  class="icon-button globe-action"
+                  type="button"
+                  title="Fullscreen globe"
+                  aria-label="Fullscreen globe"
+                  aria-pressed="false"
+                >
+                  <Maximize2 size={18} data-fullscreen-icon="enter" aria-hidden="true" />
+                  <Minimize2 size={18} data-fullscreen-icon="exit" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+            <canvas id="globeCanvas"></canvas>
+            <div id="globeTooltip" class="tooltip" hidden></div>
+          </div>
+
+          <div class="insights">
+            <div class="stat-grid">
+              <article>
+                <span>Cases</span>
+                <strong id="caseCount">...</strong>
+              </article>
+              <article>
+                <span>Total fines</span>
+                <strong id="fineTotal">...</strong>
+              </article>
+              <article>
+                <span>Restitution</span>
+                <strong id="restitutionTotal">...</strong>
+              </article>
+              <article>
+                <span>Incarceration cases</span>
+                <strong id="incarcerationCount">...</strong>
+              </article>
+            </div>
+
+            <section class="panel chart-panel">
+              <div class="panel-title">
+                <span>Timeline</span>
+                <small id="yearRange">...</small>
+              </div>
+              <div id="timeline" class="timeline" aria-label="Case volume by year"></div>
+            </section>
+
+            <section class="panel district-panel">
+              <div class="panel-title">
+                <span>Top Districts</span>
+                <small>click to filter</small>
+              </div>
+              <div id="districtList" class="district-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="results-panel" id="casesSection">
+          <div class="results-header">
+            <div>
+              <p class="eyebrow">Case browser</p>
+              <h2 id="resultsTitle">Recent cases</h2>
+            </div>
+            <div class="cases-toolbar">
+              <div class="filter-menu">
+                <button
+                  id="filterToggle"
+                  class="filter-toggle"
+                  type="button"
+                  aria-expanded="false"
+                  aria-controls="caseFilters"
+                >
+                  <Filter size={17} />
+                  <span>Filters</span>
+                </button>
+                <div id="caseFilters" class="filter-dropdown" hidden>
+                  <label>
+                    Circuit
+                    <select id="circuitFilter">
+                      <option value="">All circuits</option>
+                    </select>
+                  </label>
+                  <label>
+                    Sort
+                    <select id="sortFilter">
+                      <option value="year">Newest cases</option>
+                      <option value="fine">Largest fines</option>
+                      <option value="restitution">Largest restitution</option>
+                      <option value="jail_prison_months">Most prison months</option>
+                      <option value="case_id">Case ID</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div class="result-tools">
+                <span id="resultCount">...</span>
+                <Table2 size={18} />
+              </div>
+            </div>
+          </div>
+          <div id="results" class="results" aria-live="polite"></div>
+        </section>
+      </section>
+    </main>
+
+    <script is:inline type="application/json" id="atlas-webgl-source">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+      const circuitColors = {
+        "1": "#26c6da",
+        "2": "#5c6bc0",
+        "3": "#42a5f5",
+        "4": "#ab47bc",
+        "5": "#ffca28",
+        "6": "#ff7043",
+        "7": "#ec407a",
+        "8": "#66bb6a",
+        "9": "#29b6f6",
+        "10": "#7e57c2",
+        "11": "#00acc1",
+        "12": "#d4e157",
+        Unknown: "#90a4ae",
+      };
+
+      const state = {
+        summary: null,
+        geo: null,
+        mode: "districts",
+        selectedDistrict: "",
+        selectedCircuit: "",
+        query: "",
+      };
+
+      const $ = (selector) => document.querySelector(selector);
+      const number = new Intl.NumberFormat("en-US");
+      const money = new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0,
+      });
+
+      const canvas = $("#globeCanvas");
+      const tooltip = $("#globeTooltip");
+      const renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true,
+        alpha: true,
+        powerPreference: "high-performance",
+      });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+      camera.position.set(0, 0.15, 4.3);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 0.55;
+      controls.minDistance = 2.35;
+      controls.maxDistance = 7;
+      controls.enablePan = false;
+
+      const globeGroup = new THREE.Group();
+      scene.add(globeGroup);
+
+      const globe = new THREE.Mesh(
+        new THREE.SphereGeometry(1.5, 96, 96),
+        new THREE.MeshStandardMaterial({
+          color: "#0b2534",
+          roughness: 0.72,
+          metalness: 0.08,
+          emissive: "#031018",
+          emissiveIntensity: 0.9,
+        }),
+      );
+      globeGroup.add(globe);
+
+      const wire = new THREE.Mesh(
+        new THREE.SphereGeometry(1.505, 48, 24),
+        new THREE.MeshBasicMaterial({
+          color: "#1dd8a1",
+          wireframe: true,
+          transparent: true,
+          opacity: 0.12,
+        }),
+      );
+      globeGroup.add(wire);
+
+      const glow = new THREE.Mesh(
+        new THREE.SphereGeometry(1.57, 96, 96),
+        new THREE.MeshBasicMaterial({
+          color: "#5c6bc0",
+          transparent: true,
+          opacity: 0.06,
+          side: THREE.BackSide,
+        }),
+      );
+      globeGroup.add(glow);
+
+      scene.add(new THREE.AmbientLight("#8ee8ff", 1.25));
+      const light = new THREE.DirectionalLight("#ecfeff", 2.2);
+      light.position.set(3, 2, 4);
+      scene.add(light);
+
+      const pointsGroup = new THREE.Group();
+      globeGroup.add(pointsGroup);
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2(100, 100);
+      let hitTargets = [];
+
+      function latLngToVector(lat, lng, radius = 1.565) {
+        const phi = (90 - lat) * (Math.PI / 180);
+        const theta = (lng + 180) * (Math.PI / 180);
+        return new THREE.Vector3(
+          -radius * Math.sin(phi) * Math.cos(theta),
+          radius * Math.cos(phi),
+          radius * Math.sin(phi) * Math.sin(theta),
+        );
+      }
+
+      function resizeGlobe() {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        renderer.setSize(rect.width, rect.height, false);
+        camera.aspect = rect.width / rect.height;
+        camera.updateProjectionMatrix();
+      }
+
+      function rebuildPoints() {
+        pointsGroup.clear();
+        hitTargets = [];
+        const rows = state.mode === "districts" ? state.geo.districts : state.geo.countries;
+        const max = Math.max(...rows.map((row) => row.cases), 1);
+        for (const row of rows) {
+          const coordinate = row.coordinate ?? row;
+          const radius = 0.018 + Math.sqrt(row.cases / max) * 0.07;
+          const color =
+            state.mode === "districts"
+              ? circuitColors[row.circuit] ?? "#94a3b8"
+              : row.country === "United States"
+                ? "#26c6da"
+                : "#ffb74d";
+          const marker = new THREE.Mesh(
+            new THREE.SphereGeometry(radius, 18, 18),
+            new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.92 }),
+          );
+          marker.position.copy(latLngToVector(coordinate.lat, coordinate.lng));
+          marker.userData = row;
+          marker.lookAt(0, 0, 0);
+          pointsGroup.add(marker);
+          hitTargets.push(marker);
+        }
+        $("#geoCount").textContent = `${number.format(rows.length)} mapped ${state.mode}`;
+        $("#mapTitle").textContent =
+          state.mode === "districts" ? "District and circuit density" : "Country involvement";
+      }
+
+      function renderLoop() {
+        controls.update();
+        raycaster.setFromCamera(pointer, camera);
+        const hit = raycaster.intersectObjects(hitTargets, false)[0];
+        if (hit) {
+          const row = hit.object.userData;
+          tooltip.hidden = false;
+          tooltip.innerHTML =
+            state.mode === "districts"
+              ? `<div class="tooltip-title">${row.district_name}</div><div class="tooltip-meta">${row.state} · Circuit ${row.circuit}</div><div class="tooltip-count">${number.format(row.cases)} cases</div>`
+              : `<div class="tooltip-title">${row.country}</div><div class="tooltip-meta">Linked country field</div><div class="tooltip-count">${number.format(row.cases)} mentions</div>`;
+        } else {
+          tooltip.hidden = true;
+          tooltip.innerHTML = "";
+        }
+        renderer.render(scene, camera);
+        requestAnimationFrame(renderLoop);
+      }
+
+      canvas.addEventListener("pointermove", (event) => {
+        const rect = canvas.getBoundingClientRect();
+        pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        tooltip.style.left = `${event.clientX - rect.left + 14}px`;
+        tooltip.style.top = `${event.clientY - rect.top + 14}px`;
+      });
+
+      canvas.addEventListener("pointerleave", () => {
+        pointer.set(100, 100);
+        tooltip.hidden = true;
+        tooltip.innerHTML = "";
+      });
+
+      canvas.addEventListener("click", () => {
+        raycaster.setFromCamera(pointer, camera);
+        const hit = raycaster.intersectObjects(hitTargets, false)[0];
+        if (hit && state.mode === "districts") {
+          state.selectedDistrict = hit.object.userData.district_name;
+          loadSearch();
+        }
+      });
+
+      function renderSummary() {
+        const { stats, metadata, sheets, timeSeries, categoryFlags, topDistricts, circuits } =
+          state.summary;
+        $("#caseCount").textContent = number.format(stats.cases);
+        $("#fineTotal").textContent = money.format(stats.total_fines);
+        $("#restitutionTotal").textContent = money.format(stats.total_restitution);
+        $("#incarcerationCount").textContent = number.format(stats.incarceration_cases);
+        $("#yearRange").textContent = `${stats.first_year ?? "?"} to ${stats.last_year ?? "?"}`;
+
+        $("#metaGrid").innerHTML = `
+          <div><dt>Cases</dt><dd>${number.format(stats.cases)}</dd></div>
+          <div><dt>Years</dt><dd>${stats.first_year ?? "?"}-${stats.last_year ?? "?"}</dd></div>
+          <div><dt>Sheets</dt><dd>${sheets.length}</dd></div>
+          <div><dt>Imported</dt><dd>${new Date(metadata.imported_at).toLocaleDateString()}</dd></div>
+        `;
+
+        const select = $("#circuitFilter");
+        select.querySelectorAll("option:not(:first-child)").forEach((option) => option.remove());
+        for (const row of circuits) {
+          const option = document.createElement("option");
+          option.value = row.circuit;
+          option.textContent = `Circuit ${row.circuit} · ${number.format(row.cases)}`;
+          select.append(option);
+        }
+
+        const maxYear = Math.max(...timeSeries.map((row) => row.cases), 1);
+        const timelineColors = ["#42a5f5", "#26c6da", "#ffb74d", "#ab47bc", "#ec407a", "#66bb6a", "#7e57c2", "#d4e157"];
+        $("#timeline").innerHTML = timeSeries
+          .map(
+            (row, index) =>
+              `<button type="button" style="--h:${Math.max(18, Math.round((row.cases / maxYear) * 136))}px;--bar:${timelineColors[index % timelineColors.length]}" title="${row.year}: ${number.format(row.cases)} cases"><em>${number.format(row.cases)}</em><span></span><small>${row.year}</small></button>`,
+          )
+          .join("");
+
+        const maxFlag = Math.max(...categoryFlags.map((row) => row.cases), 1);
+        $("#categoryBars").innerHTML = categoryFlags
+          .map(
+            (row) =>
+              `<div class="bar-row"><span>${row.label}</span><div><i style="width:${(row.cases / maxFlag) * 100}%"></i></div><b>${number.format(row.cases)}</b></div>`,
+          )
+          .join("");
+
+        $("#districtList").innerHTML = topDistricts
+          .map(
+            (row) =>
+              `<button type="button" data-district="${row.district_name}"><span><b>${row.district_name}</b><small>${row.state} · Circuit ${row.circuit}</small></span><strong>${number.format(row.cases)}</strong></button>`,
+          )
+          .join("");
+        $("#districtList").querySelectorAll("button").forEach((button) => {
+          button.addEventListener("click", () => {
+            state.selectedDistrict = button.dataset.district;
+            loadSearch();
+          });
+        });
+      }
+
+      function caseCard(row) {
+        const category =
+          row.category_harmonized ||
+          row.category_collapsed ||
+          row.category_group ||
+          row.species_category ||
+          "Uncategorized";
+        const penalties = [
+          row.fine ? `${money.format(row.fine)} fine` : null,
+          row.restitution ? `${money.format(row.restitution)} restitution` : null,
+          row.jail_prison_months ? `${number.format(row.jail_prison_months)} prison months` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        return `<article class="case-card">
+          <div>
+            <h3>${row.case_id ?? row.base_id ?? "Unnamed case"}</h3>
+            <p>${row.district_name ?? "Unknown district"}${row.state ? `, ${row.state}` : ""} · ${row.year ?? "No year"} · Circuit ${row.circuit ?? "?"}</p>
+          </div>
+          <div class="case-tags">
+            <span>${category}</span>
+            ${row.country_primary ? `<span>${row.country_primary}</span>` : ""}
+            ${penalties ? `<span>${penalties}</span>` : ""}
+          </div>
+          <p class="charges">${row.charge_snippet || row.charges || "No charge text available."}</p>
+        </article>`;
+      }
+
+      async function loadSearch() {
+        const params = new URLSearchParams();
+        if (state.query) params.set("q", state.query);
+        if (state.selectedDistrict) params.set("district", state.selectedDistrict);
+        if (state.selectedCircuit) params.set("circuit", state.selectedCircuit);
+        params.set("sort", $("#sortFilter").value);
+        const response = await fetch(`/api/search?${params}`);
+        const data = await response.json();
+        $("#resultsTitle").textContent = state.query
+          ? `Search results for "${state.query}"`
+          : state.selectedDistrict
+            ? state.selectedDistrict
+            : "Recent cases";
+        $("#resultCount").textContent = `${number.format(data.total)} matches`;
+        $("#results").innerHTML = data.rows.length
+          ? data.rows.map(caseCard).join("")
+          : `<div class="empty">No matching cases found.</div>`;
+      }
+
+      async function boot() {
+        const [summary, geo] = await Promise.all([
+          fetch("/api/summary").then((r) => r.json()),
+          fetch("/api/geo").then((r) => r.json()),
+        ]);
+        state.summary = summary;
+        state.geo = geo;
+        renderSummary();
+        rebuildPoints();
+        resizeGlobe();
+        renderLoop();
+        loadSearch();
+      }
+
+      let searchTimer;
+      $("#searchInput").addEventListener("input", (event) => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          state.query = event.target.value.trim();
+          state.selectedDistrict = "";
+          loadSearch();
+        }, 140);
+      });
+
+      $("#circuitFilter").addEventListener("change", (event) => {
+        state.selectedCircuit = event.target.value;
+        state.selectedDistrict = "";
+        loadSearch();
+      });
+
+      $("#sortFilter").addEventListener("change", loadSearch);
+
+      document.querySelectorAll("[data-mode]").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll("[data-mode]").forEach((item) => item.classList.remove("active"));
+          button.classList.add("active");
+          state.mode = button.dataset.mode;
+          rebuildPoints();
+        });
+      });
+
+      $("#themeToggle").addEventListener("click", () => {
+        const enabled = document.body.classList.toggle("light");
+        document.documentElement.classList.toggle("light", enabled);
+      });
+
+      window.addEventListener("resize", resizeGlobe);
+      boot();
+    </script>
+    <script is:inline>
+      (() => {
+        const bootFallback = () => {
+          if (document.getElementById("caseCount")?.textContent !== "...") return;
+
+          const number = new Intl.NumberFormat("en-US");
+          const money = new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: "USD",
+            maximumFractionDigits: 0,
+          });
+          const $ = (selector) => document.querySelector(selector);
+          const canvas = $("#globeCanvas");
+          const ctx = canvas.getContext("2d", { alpha: true });
+          if (!ctx) return;
+          const tooltip = $("#globeTooltip");
+          const app = {
+            summary: null,
+            geo: null,
+            mode: "districts",
+            query: "",
+            selectedDistrict: "",
+            selectedCircuit: "",
+            rotation: 1.7,
+            zoom: 1,
+            points: [],
+          };
+          const colors = {
+            "1": "#26c6da",
+            "2": "#5c6bc0",
+            "3": "#42a5f5",
+            "4": "#ab47bc",
+            "5": "#ffca28",
+            "6": "#ff7043",
+            "7": "#ec407a",
+            "8": "#66bb6a",
+            "9": "#29b6f6",
+            "10": "#7e57c2",
+            "11": "#00acc1",
+            "12": "#d4e157",
+            Unknown: "#90a4ae",
+          };
+
+          function escapeHtml(value) {
+            return String(value ?? "")
+              .replaceAll("&", "&amp;")
+              .replaceAll("<", "&lt;")
+              .replaceAll(">", "&gt;")
+              .replaceAll('"', "&quot;");
+          }
+
+          function resize() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+            canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          }
+
+          function project(lat, lng) {
+            const rect = canvas.getBoundingClientRect();
+            const radius = Math.min(rect.width, rect.height) * 0.31 * app.zoom;
+            const cx = rect.width * 0.5;
+            const cy = rect.height * 0.54;
+            const phi = (lat * Math.PI) / 180;
+            const lambda = (lng * Math.PI) / 180 + app.rotation;
+            const cosPhi = Math.cos(phi);
+            const x3 = cosPhi * Math.sin(lambda);
+            const y3 = Math.sin(phi);
+            const z3 = cosPhi * Math.cos(lambda);
+            return {
+              x: cx + radius * x3,
+              y: cy - radius * y3,
+              z: z3,
+              radius,
+              cx,
+              cy,
+            };
+          }
+
+          function rebuildPoints() {
+            const rows = app.mode === "districts" ? app.geo.districts : app.geo.countries;
+            const max = Math.max(...rows.map((row) => row.cases), 1);
+            app.points = rows.map((row) => {
+              const coordinate = row.coordinate || row;
+              return {
+                row,
+                lat: coordinate.lat,
+                lng: coordinate.lng,
+                size: 3 + Math.sqrt(row.cases / max) * 10,
+                color:
+                  app.mode === "districts"
+                  ? colors[row.circuit] || "#94a3b8"
+                  : row.country === "United States"
+                    ? "#26c6da"
+                    : "#ffb74d",
+              };
+            });
+            $("#geoCount").textContent = `${number.format(rows.length)} mapped ${app.mode}`;
+            $("#mapTitle").textContent =
+              app.mode === "districts" ? "District and circuit density" : "Country involvement";
+          }
+
+          function draw() {
+            const rect = canvas.getBoundingClientRect();
+            ctx.clearRect(0, 0, rect.width, rect.height);
+            const sample = project(0, 0);
+            const gradient = ctx.createRadialGradient(
+              sample.cx - sample.radius * 0.35,
+              sample.cy - sample.radius * 0.45,
+              sample.radius * 0.08,
+              sample.cx,
+              sample.cy,
+              sample.radius,
+            );
+            gradient.addColorStop(0, "#16465c");
+            gradient.addColorStop(0.52, "#0b2633");
+            gradient.addColorStop(1, "#041117");
+            ctx.beginPath();
+            ctx.arc(sample.cx, sample.cy, sample.radius, 0, Math.PI * 2);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            ctx.strokeStyle = "rgba(144, 202, 249, 0.16)";
+            ctx.lineWidth = 1;
+            for (let lat = -60; lat <= 60; lat += 30) {
+              ctx.beginPath();
+              for (let lng = -180; lng <= 180; lng += 4) {
+                const point = project(lat, lng);
+                if (point.z < -0.12) continue;
+                ctx[point.lng === -180 ? "moveTo" : "lineTo"]?.(point.x, point.y);
+              }
+              ctx.stroke();
+            }
+            for (let lng = -180; lng < 180; lng += 30) {
+              ctx.beginPath();
+              let started = false;
+              for (let lat = -88; lat <= 88; lat += 3) {
+                const point = project(lat, lng);
+                if (point.z < -0.12) {
+                  started = false;
+                  continue;
+                }
+                if (!started) {
+                  ctx.moveTo(point.x, point.y);
+                  started = true;
+                } else {
+                  ctx.lineTo(point.x, point.y);
+                }
+              }
+              ctx.stroke();
+            }
+            for (const point of app.points) {
+              const projected = project(point.lat, point.lng);
+              if (projected.z < -0.05) continue;
+              const alpha = 0.35 + projected.z * 0.65;
+              ctx.beginPath();
+              ctx.arc(projected.x, projected.y, point.size * app.zoom, 0, Math.PI * 2);
+              ctx.fillStyle = point.color;
+              ctx.globalAlpha = alpha;
+              ctx.fill();
+              ctx.globalAlpha = Math.min(0.26, alpha * 0.32);
+              ctx.beginPath();
+              ctx.arc(projected.x, projected.y, point.size * app.zoom * 2.2, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.globalAlpha = 1;
+            }
+            app.rotation += 0.0017;
+            requestAnimationFrame(draw);
+          }
+
+          function renderSummary() {
+            const { stats, metadata, sheets, timeSeries, categoryFlags, topDistricts, circuits } =
+              app.summary;
+            $("#caseCount").textContent = number.format(stats.cases);
+            $("#fineTotal").textContent = money.format(stats.total_fines);
+            $("#restitutionTotal").textContent = money.format(stats.total_restitution);
+            $("#incarcerationCount").textContent = number.format(stats.incarceration_cases);
+            $("#yearRange").textContent = `${stats.first_year ?? "?"} to ${stats.last_year ?? "?"}`;
+            $("#metaGrid").innerHTML = `
+              <div><dt>Cases</dt><dd>${number.format(stats.cases)}</dd></div>
+              <div><dt>Years</dt><dd>${stats.first_year ?? "?"}-${stats.last_year ?? "?"}</dd></div>
+              <div><dt>Sheets</dt><dd>${sheets.length}</dd></div>
+              <div><dt>Imported</dt><dd>${new Date(metadata.imported_at).toLocaleDateString()}</dd></div>
+            `;
+            const select = $("#circuitFilter");
+            select.querySelectorAll("option:not(:first-child)").forEach((option) => option.remove());
+            circuits.forEach((row) => {
+              const option = document.createElement("option");
+              option.value = row.circuit;
+              option.textContent = `Circuit ${row.circuit} · ${number.format(row.cases)}`;
+              select.append(option);
+            });
+            const maxYear = Math.max(...timeSeries.map((row) => row.cases), 1);
+            const timelineColors = ["#42a5f5", "#26c6da", "#ffb74d", "#ab47bc", "#ec407a", "#66bb6a", "#7e57c2", "#d4e157"];
+            $("#timeline").innerHTML = timeSeries
+              .map(
+                (row, index) =>
+                  `<button type="button" style="--h:${Math.max(18, Math.round((row.cases / maxYear) * 136))}px;--bar:${timelineColors[index % timelineColors.length]}" title="${row.year}: ${number.format(row.cases)} cases"><em>${number.format(row.cases)}</em><span></span><small>${row.year}</small></button>`,
+              )
+              .join("");
+            const maxFlag = Math.max(...categoryFlags.map((row) => row.cases), 1);
+            $("#categoryBars").innerHTML = categoryFlags
+              .map(
+                (row) =>
+                  `<div class="bar-row"><span>${escapeHtml(row.label)}</span><div><i style="width:${(row.cases / maxFlag) * 100}%"></i></div><b>${number.format(row.cases)}</b></div>`,
+              )
+              .join("");
+            $("#districtList").innerHTML = topDistricts
+              .map(
+                (row) =>
+                  `<button type="button" data-district="${escapeHtml(row.district_name)}"><span><b>${escapeHtml(row.district_name)}</b><small>${escapeHtml(row.state)} · Circuit ${escapeHtml(row.circuit)}</small></span><strong>${number.format(row.cases)}</strong></button>`,
+              )
+              .join("");
+            $("#districtList").querySelectorAll("button").forEach((button) => {
+              button.addEventListener("click", () => {
+                app.selectedDistrict = button.dataset.district || "";
+                loadSearch();
+              });
+            });
+          }
+
+          function caseCard(row) {
+            const category =
+              row.category_harmonized ||
+              row.category_collapsed ||
+              row.category_group ||
+              row.species_category ||
+              "Uncategorized";
+            const penalties = [
+              row.fine ? `${money.format(row.fine)} fine` : null,
+              row.restitution ? `${money.format(row.restitution)} restitution` : null,
+              row.jail_prison_months ? `${number.format(row.jail_prison_months)} prison months` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return `<article class="case-card">
+              <div>
+                <h3>${escapeHtml(row.case_id || row.base_id || "Unnamed case")}</h3>
+                <p>${escapeHtml(row.district_name || "Unknown district")}${row.state ? `, ${escapeHtml(row.state)}` : ""} · ${escapeHtml(row.year || "No year")} · Circuit ${escapeHtml(row.circuit || "?")}</p>
+              </div>
+              <div class="case-tags">
+                <span>${escapeHtml(category)}</span>
+                ${row.country_primary ? `<span>${escapeHtml(row.country_primary)}</span>` : ""}
+                ${penalties ? `<span>${escapeHtml(penalties)}</span>` : ""}
+              </div>
+              <p class="charges">${row.charge_snippet || escapeHtml(row.charges || "No charge text available.")}</p>
+            </article>`;
+          }
+
+          async function loadSearch() {
+            const params = new URLSearchParams();
+            if (app.query) params.set("q", app.query);
+            if (app.selectedDistrict) params.set("district", app.selectedDistrict);
+            if (app.selectedCircuit) params.set("circuit", app.selectedCircuit);
+            params.set("sort", $("#sortFilter").value);
+            const data = await fetch(`/api/search?${params}`).then((response) => response.json());
+            $("#resultsTitle").textContent = app.query
+              ? `Search results for "${app.query}"`
+              : app.selectedDistrict || "Recent cases";
+            $("#resultCount").textContent = `${number.format(data.total)} matches`;
+            $("#results").innerHTML = data.rows.length
+              ? data.rows.map(caseCard).join("")
+              : `<div class="empty">No matching cases found.</div>`;
+          }
+
+          canvas.addEventListener("pointermove", (event) => {
+            const rect = canvas.getBoundingClientRect();
+            let hit = null;
+            for (const point of app.points) {
+              const projected = project(point.lat, point.lng);
+              if (projected.z < -0.05) continue;
+              const dx = event.clientX - rect.left - projected.x;
+              const dy = event.clientY - rect.top - projected.y;
+              if (Math.hypot(dx, dy) <= point.size * app.zoom + 5) hit = point;
+            }
+            if (!hit) {
+              tooltip.hidden = true;
+              tooltip.innerHTML = "";
+              return;
+            }
+            tooltip.hidden = false;
+            tooltip.style.left = `${event.clientX - rect.left + 14}px`;
+            tooltip.style.top = `${event.clientY - rect.top + 14}px`;
+            const row = hit.row;
+            tooltip.innerHTML =
+              app.mode === "districts"
+                ? `<div class="tooltip-title">${escapeHtml(row.district_name)}</div><div class="tooltip-meta">${escapeHtml(row.state)} · Circuit ${escapeHtml(row.circuit)}</div><div class="tooltip-count">${number.format(row.cases)} cases</div>`
+                : `<div class="tooltip-title">${escapeHtml(row.country)}</div><div class="tooltip-meta">Linked country field</div><div class="tooltip-count">${number.format(row.cases)} mentions</div>`;
+          });
+
+          canvas.addEventListener("click", (event) => {
+            if (app.mode !== "districts") return;
+            const rect = canvas.getBoundingClientRect();
+            for (const point of app.points) {
+              const projected = project(point.lat, point.lng);
+              if (projected.z < -0.05) continue;
+              const dx = event.clientX - rect.left - projected.x;
+              const dy = event.clientY - rect.top - projected.y;
+              if (Math.hypot(dx, dy) <= point.size * app.zoom + 5) {
+                app.selectedDistrict = point.row.district_name;
+                loadSearch();
+                return;
+              }
+            }
+          });
+
+          canvas.addEventListener(
+            "wheel",
+            (event) => {
+              event.preventDefault();
+              app.zoom = Math.min(1.85, Math.max(0.72, app.zoom + (event.deltaY > 0 ? -0.08 : 0.08)));
+            },
+            { passive: false },
+          );
+
+          let searchTimer;
+          $("#searchInput").addEventListener("input", (event) => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => {
+              app.query = event.target.value.trim();
+              app.selectedDistrict = "";
+              loadSearch();
+            }, 140);
+          });
+          $("#circuitFilter").addEventListener("change", (event) => {
+            app.selectedCircuit = event.target.value;
+            app.selectedDistrict = "";
+            loadSearch();
+          });
+          $("#sortFilter").addEventListener("change", loadSearch);
+          $("#themeToggle").addEventListener("click", () => {
+            const enabled = document.body.classList.toggle("light");
+            document.documentElement.classList.toggle("light", enabled);
+          });
+          document.querySelectorAll("[data-mode]").forEach((button) => {
+            button.addEventListener("click", () => {
+              document.querySelectorAll("[data-mode]").forEach((item) => item.classList.remove("active"));
+              button.classList.add("active");
+              app.mode = button.dataset.mode;
+              rebuildPoints();
+            });
+          });
+          window.addEventListener("resize", () => {
+            resize();
+            draw();
+          });
+
+          Promise.all([
+            fetch("/api/summary").then((response) => response.json()),
+            fetch("/api/geo").then((response) => response.json()),
+          ]).then(([summary, geo]) => {
+            app.summary = summary;
+            app.geo = geo;
+            renderSummary();
+            rebuildPoints();
+            resize();
+            draw();
+            loadSearch();
+          });
+        };
+
+        window.__atlasFallbackBoot = bootFallback;
+      })();
+    </script>
+    <script src="../scripts/atlas.ts"></script>
+  </body>
+</html>
+
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #10131f;
+    --bg-2: #171b2a;
+    --panel: rgba(31, 35, 52, 0.82);
+    --panel-solid: #202436;
+    --line: rgba(198, 208, 255, 0.13);
+    --text: #f4f7ff;
+    --muted: #aab3ca;
+    --green: #26c6da;
+    --blue: #5c6bc0;
+    --yellow: #ffb74d;
+    --danger: #ec407a;
+    --purple: #ab47bc;
+    --teal: #26c6da;
+    --coral: #ff7043;
+    --surface-raised: rgba(255, 255, 255, 0.055);
+    --shadow: 0 18px 46px rgba(2, 6, 23, 0.34);
+    font-family:
+      Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    min-height: 100%;
+    overflow-x: hidden;
+    background: #10131f;
+  }
+
+  html.light {
+    background: #fbfcff;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background-color: #10131f;
+    background:
+      radial-gradient(circle at 78% 8%, rgba(92, 107, 192, 0.2), transparent 28rem),
+      radial-gradient(circle at 18% 74%, rgba(255, 183, 77, 0.12), transparent 24rem),
+      linear-gradient(135deg, #10131f 0%, #15192a 48%, #111827 100%);
+    color: var(--text);
+  }
+
+  body.light {
+    color-scheme: light;
+    --bg: #f5fbf9;
+    --bg-2: #eaf6f4;
+    --panel: rgba(255, 255, 255, 0.82);
+    --panel-solid: #ffffff;
+    --line: rgba(66, 82, 144, 0.18);
+    --text: #102320;
+    --muted: #526966;
+    --shadow: 0 22px 60px rgba(64, 73, 116, 0.14);
+    background-color: #fbfcff;
+    background:
+      radial-gradient(circle at 82% 14%, rgba(92, 107, 192, 0.14), transparent 24rem),
+      linear-gradient(135deg, #fbfcff 0%, #f4f6ff 48%, #eef7fb 100%);
+  }
+
+  button,
+  input,
+  select {
+    font: inherit;
+  }
+
+  mark {
+    color: inherit;
+    background: rgba(255, 183, 77, 0.24);
+    border-radius: 3px;
+    padding: 0 2px;
+  }
+
+  .app-shell {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+    min-height: 100dvh;
+    padding: 18px;
+  }
+
+  body[data-page="data"] .app-shell {
+    align-content: start;
+    gap: 12px;
+    padding-top: 10px;
+  }
+
+  .workspace {
+    order: 0;
+  }
+
+  .sidebar {
+    order: 1;
+  }
+
+  body[data-page="atlas"] #casesSection,
+  body[data-page="atlas"] #dataSection,
+  body[data-page="cases"] #atlasSection,
+  body[data-page="cases"] #dataSection,
+  body[data-page="data"] #atlasSection,
+  body[data-page="data"] #casesSection {
+    display: none;
+  }
+
+  .sidebar,
+  .workspace {
+    min-width: 0;
+  }
+
+  .sidebar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    width: min(100%, 980px);
+    margin: 0 auto;
+    position: static;
+    height: auto;
+    overflow: visible;
+    padding-right: 0;
+    scrollbar-gutter: stable;
+  }
+
+  .sidebar .brand,
+  .sidebar .category-panel {
+    grid-column: 1 / -1;
+  }
+
+  body[data-page="data"] .sidebar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: min(100%, 1280px);
+    align-items: start;
+  }
+
+  body[data-page="data"] .sidebar .brand {
+    max-width: none;
+  }
+
+  body[data-page="data"] .workbook-panel,
+  body[data-page="data"] .export-panel {
+    align-self: start;
+    min-height: 242px;
+  }
+
+  body[data-page="data"] .category-panel {
+    grid-column: 1 / -1;
+  }
+
+  .sidebar::-webkit-scrollbar,
+  .search-overlay-results::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .sidebar::-webkit-scrollbar-thumb,
+  .search-overlay-results::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background: rgba(170, 179, 202, 0.42);
+    background-clip: padding-box;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 2px 6px;
+  }
+
+  .brand-mark {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(92, 107, 192, 0.28), rgba(255, 183, 77, 0.18));
+    color: var(--yellow);
+  }
+
+  .brand h1,
+  .globe-header h2,
+  .results-header h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    line-height: 1.15;
+    letter-spacing: 0;
+  }
+
+  .eyebrow {
+    margin: 0 0 4px;
+    color: var(--yellow);
+    font-size: 0.72rem;
+    font-weight: 750;
+    text-transform: uppercase;
+  }
+
+  .panel,
+  .globe-stage,
+  .results-panel {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(18px);
+  }
+
+  .panel {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel::before,
+  .results-panel::before {
+    content: "";
+    display: block;
+    height: 3px;
+    margin: -1px -1px 12px;
+    background: linear-gradient(90deg, #42a5f5, #ab47bc, #ffb74d, #26c6da);
+    opacity: 0.82;
+  }
+
+  .panel.compact {
+    padding: 15px;
+  }
+
+  .panel-title,
+  .results-header,
+  .globe-header,
+  .topbar,
+  .result-tools,
+  .metric-pill {
+    display: flex;
+    align-items: center;
+  }
+
+  .panel-title {
+    gap: 8px;
+    justify-content: flex-start;
+    margin-bottom: 13px;
+    color: var(--text);
+    font-weight: 750;
+  }
+
+  .panel-title small {
+    margin-left: auto;
+  }
+
+  .panel-title small {
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 650;
+  }
+
+  .panel.compact .panel-title {
+    justify-content: center;
+  }
+
+  .panel.compact .panel-title svg {
+    position: static;
+    flex: 0 0 auto;
+  }
+
+  .panel-copy {
+    margin: -2px 0 14px;
+    color: var(--muted);
+    font-size: 0.86rem;
+    line-height: 1.45;
+  }
+
+  .export-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .export-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 56px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-raised);
+    color: var(--text);
+    padding: 12px 14px;
+    text-align: center;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 850;
+    line-height: 1.15;
+    transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+  }
+
+  .export-button svg {
+    flex: 0 0 auto;
+  }
+
+  .export-button:hover {
+    border-color: rgba(66, 165, 245, 0.52);
+    background: rgba(66, 165, 245, 0.12);
+    transform: translateY(-1px);
+  }
+
+  .export-button.primary {
+    color: #f4f7ff;
+    background: linear-gradient(135deg, #42a5f5, #26c6da);
+    border-color: rgba(129, 212, 250, 0.52);
+  }
+
+  body.light .export-button.primary {
+    color: #0f1b1c;
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0;
+  }
+
+  .meta-grid div,
+  .stat-grid article {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-raised);
+    padding: 10px;
+    min-width: 0;
+  }
+
+  .meta-grid div {
+    display: grid;
+    min-height: 92px;
+    place-items: center;
+    align-content: center;
+    text-align: center;
+  }
+
+  body[data-page="data"] .meta-grid {
+    gap: 10px;
+  }
+
+  body[data-page="data"] .meta-grid div {
+    min-height: 82px;
+    padding: 10px;
+  }
+
+  body[data-page="data"] .meta-grid dt {
+    font-size: 0.9rem;
+  }
+
+  body[data-page="data"] .meta-grid dd {
+    font-size: clamp(1.08rem, 1.55vw, 1.34rem);
+  }
+
+  dt,
+  .stat-grid span {
+    color: var(--muted);
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+
+  dd {
+    margin: 4px 0 0;
+    margin-inline: 0;
+    max-width: 100%;
+    font-size: clamp(0.94rem, 1.7vw, 1.08rem);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.14;
+    overflow-wrap: anywhere;
+    justify-self: center;
+  }
+
+  label {
+    display: grid;
+    gap: 7px;
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  select,
+  input {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(17, 20, 33, 0.72);
+    color: var(--text);
+    outline: none;
+  }
+
+  body.light select,
+  body.light input {
+    background: rgba(255, 255, 255, 0.82);
+  }
+
+  select {
+    padding: 10px 11px;
+  }
+
+  .workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .topbar {
+    gap: 12px;
+    position: sticky;
+    top: 18px;
+    z-index: 5;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    flex-basis: 420px;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    padding: 0 12px;
+    box-shadow: var(--shadow);
+  }
+
+  .search-wrap:focus-within,
+  select:focus {
+    border-color: rgba(66, 165, 245, 0.64);
+    box-shadow: 0 0 0 3px rgba(66, 165, 245, 0.14), var(--shadow);
+  }
+
+  .search-wrap input {
+    min-height: 46px;
+    border: 0;
+    background: transparent;
+  }
+
+  .mode-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--panel);
+  }
+
+  .page-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+  }
+
+  .page-tabs button {
+    min-height: 46px;
+    min-width: 74px;
+    border: 0;
+    border-right: 1px solid var(--line);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-weight: 800;
+  }
+
+  .page-tabs button:last-child {
+    border-right: 0;
+  }
+
+  .page-tabs button:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.055);
+  }
+
+  .page-tabs button.active {
+    color: var(--text);
+    background: linear-gradient(135deg, rgba(66, 165, 245, 0.2), rgba(255, 183, 77, 0.14));
+  }
+
+  .mode-tabs button,
+  .icon-button {
+    min-height: 46px;
+    border: 0;
+    color: var(--muted);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .mode-tabs button {
+    min-width: 88px;
+    padding: 0 14px;
+    font-weight: 800;
+  }
+
+  .mode-tabs button.active {
+    background: linear-gradient(135deg, rgba(92, 107, 192, 0.34), rgba(38, 198, 218, 0.22));
+    color: var(--text);
+  }
+
+  body:not([data-page="atlas"]) .mode-tabs {
+    display: none;
+  }
+
+  .icon-button {
+    display: grid;
+    place-items: center;
+    width: 46px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+  }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(430px, 1.3fr) minmax(330px, 0.7fr);
+    gap: 18px;
+    min-height: 640px;
+  }
+
+  .search-popover {
+    position: sticky;
+    top: 78px;
+    z-index: 6;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--panel-solid), transparent 4%);
+    box-shadow: var(--shadow);
+    padding: 15px;
+    backdrop-filter: blur(20px);
+  }
+
+  .search-popover[hidden] {
+    display: none;
+  }
+
+  .search-popover-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .search-popover-header h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    line-height: 1.15;
+  }
+
+  #searchClose {
+    font-size: 1.4rem;
+    line-height: 1;
+  }
+
+  .search-overlay-results {
+    max-height: min(62vh, 620px);
+    overflow: auto;
+    padding-right: 3px;
+  }
+
+  .globe-stage {
+    position: relative;
+    height: 640px;
+    min-height: 640px;
+    overflow: hidden;
+  }
+
+  body.light .globe-stage {
+    border-color: rgba(148, 163, 184, 0.24);
+    background:
+      radial-gradient(circle at 50% 48%, rgba(186, 230, 253, 0.36), transparent 31rem),
+      linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(225, 242, 255, 0.92));
+    box-shadow: 0 24px 70px rgba(30, 64, 175, 0.16);
+  }
+
+  body.light .globe-stage .globe-header h2 {
+    color: #12312e;
+  }
+
+  body.light .globe-stage .metric-pill,
+  body.light .globe-stage .globe-action {
+    border-color: rgba(148, 163, 184, 0.24);
+    background: rgba(255, 255, 255, 0.76);
+    color: #12312e;
+  }
+
+  body.light .globe-stage .metric-pill span {
+    color: #526764;
+  }
+
+  .globe-stage canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 640px;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  .globe-stage canvas.is-dragging {
+    cursor: grabbing;
+  }
+
+  .globe-header {
+    position: absolute;
+    z-index: 2;
+    top: 18px;
+    left: 18px;
+    right: 18px;
+    justify-content: space-between;
+    gap: 14px;
+    pointer-events: none;
+  }
+
+  .globe-controls {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+  }
+
+  .globe-action {
+    pointer-events: auto;
+    color: var(--text);
+    background: rgba(22, 26, 42, 0.72);
+    backdrop-filter: blur(12px);
+  }
+
+  .globe-action [data-fullscreen-icon="exit"],
+  .globe-action.is-fullscreen [data-fullscreen-icon="enter"] {
+    display: none;
+  }
+
+  .globe-action.is-fullscreen [data-fullscreen-icon="exit"] {
+    display: block;
+  }
+
+  body.light .globe-action {
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .globe-stage:fullscreen {
+    width: 100vw;
+    height: 100vh;
+    min-height: 100vh;
+    border-radius: 0;
+    background: #0d111c;
+  }
+
+  .globe-stage:fullscreen canvas {
+    height: 100vh;
+    min-height: 100vh;
+  }
+
+  .metric-pill,
+  .result-tools {
+    gap: 8px;
+    min-width: 0;
+    max-width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(22, 26, 42, 0.72);
+    color: var(--muted);
+    padding: 9px 11px;
+    font-size: 0.82rem;
+    font-weight: 800;
+  }
+
+  .metric-pill span,
+  .result-tools span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  body.light .metric-pill,
+  body.light .result-tools {
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .tooltip {
+    position: absolute;
+    z-index: 4;
+    display: grid;
+    gap: 7px;
+    max-width: min(280px, calc(100vw - 32px));
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(25, 29, 45, 0.94);
+    color: var(--text);
+    padding: 10px 12px;
+    box-shadow: var(--shadow);
+    pointer-events: none;
+  }
+
+  .tooltip[hidden] {
+    display: none;
+  }
+
+  body.light .tooltip {
+    background: rgba(255, 255, 255, 0.94);
+  }
+
+  .tooltip-title {
+    font-size: clamp(0.95rem, 1.6vw, 1.05rem);
+    font-weight: 900;
+    line-height: 1.18;
+    overflow-wrap: anywhere;
+  }
+
+  .tooltip-meta {
+    color: var(--muted);
+    font-size: 0.74rem;
+    font-weight: 800;
+    line-height: 1.25;
+  }
+
+  .tooltip-count {
+    color: var(--yellow);
+    font-size: 0.88rem;
+    font-weight: 900;
+    line-height: 1.1;
+  }
+
+  .tooltip strong,
+  .tooltip span,
+  .tooltip b {
+    display: block;
+  }
+
+  .insights {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .stat-grid article {
+    position: relative;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 94px;
+    padding: 15px;
+    background:
+      linear-gradient(135deg, var(--stat-glow, rgba(92, 107, 192, 0.14)), transparent),
+      var(--panel);
+  }
+
+  .stat-grid article::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: var(--stat-accent, #42a5f5);
+  }
+
+  .stat-grid article:nth-child(1) {
+    --stat-glow: rgba(66, 165, 245, 0.18);
+    --stat-accent: #42a5f5;
+  }
+
+  .stat-grid article:nth-child(2) {
+    --stat-glow: rgba(255, 183, 77, 0.2);
+    --stat-accent: #ffb74d;
+  }
+
+  .stat-grid article:nth-child(3) {
+    --stat-glow: rgba(171, 71, 188, 0.18);
+    --stat-accent: #ab47bc;
+  }
+
+  .stat-grid article:nth-child(4) {
+    --stat-glow: rgba(236, 64, 122, 0.16);
+    --stat-accent: #ec407a;
+  }
+
+  .stat-grid strong {
+    display: block;
+    margin-top: 8px;
+    max-width: 100%;
+    font-size: clamp(1.08rem, 1.55vw, 1.58rem);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.08;
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+  }
+
+  #fineTotal,
+  #restitutionTotal {
+    font-size: clamp(0.96rem, 1.18vw, 1.42rem);
+  }
+
+  .chart-panel,
+  .district-panel {
+    padding: 16px;
+  }
+
+  .timeline {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(32px, 1fr);
+    align-items: end;
+    gap: 8px;
+    min-height: 220px;
+    padding: 14px 4px 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-gutter: stable;
+    border-bottom: 1px solid rgba(170, 179, 202, 0.18);
+  }
+
+  .timeline button {
+    display: grid;
+    grid-template-rows: 24px 144px 34px;
+    align-items: end;
+    gap: 7px;
+    height: 100%;
+    min-width: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .timeline::-webkit-scrollbar {
+    height: 10px;
+  }
+
+  .timeline::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background: rgba(170, 179, 202, 0.42);
+    background-clip: padding-box;
+  }
+
+  .timeline span {
+    display: block;
+    width: 100%;
+    height: var(--h);
+    min-height: 18px;
+    align-self: end;
+    border-radius: 8px 8px 3px 3px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bar, #42a5f5), white 18%), var(--bar, #42a5f5) 48%, color-mix(in srgb, var(--bar, #42a5f5), #1f2937 26%));
+    box-shadow: 0 10px 22px color-mix(in srgb, var(--bar, #42a5f5), transparent 72%);
+    transition: filter 160ms ease, transform 160ms ease;
+  }
+
+  .timeline button:hover span {
+    filter: saturate(1.15) brightness(1.08);
+    transform: translateY(-2px);
+  }
+
+  .timeline em {
+    align-self: end;
+    color: var(--muted);
+    font-size: 0.62rem;
+    font-style: normal;
+    font-weight: 900;
+    line-height: 1;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+
+  .timeline button:hover em {
+    opacity: 1;
+  }
+
+  .timeline small {
+    color: var(--muted);
+    justify-self: center;
+    font-size: 0.62rem;
+    font-weight: 800;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+  }
+
+  .bars,
+  .district-list,
+  .results {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .bar-row {
+    display: grid;
+    grid-template-columns: minmax(160px, 0.58fr) minmax(220px, 1fr) 44px;
+    align-items: center;
+    gap: 14px;
+    font-size: 0.82rem;
+  }
+
+  .bar-row span {
+    color: var(--muted);
+  }
+
+  .bar-row div {
+    height: 12px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(170, 179, 202, 0.16);
+  }
+
+  .bar-row i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--bar, #42a5f5), color-mix(in srgb, var(--bar, #42a5f5), white 24%));
+  }
+
+  .bar-row b {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  body[data-page="data"] .category-panel {
+    padding-bottom: 18px;
+  }
+
+  body[data-page="data"] .bars {
+    gap: 12px;
+    width: min(100%, 1040px);
+    margin: 0 auto;
+  }
+
+  body[data-page="data"] .bar-row {
+    grid-template-columns: minmax(180px, 0.45fr) minmax(360px, 1fr) 48px;
+    font-size: 0.86rem;
+  }
+
+  .district-list button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-raised);
+    color: var(--text);
+    padding: 10px 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+  }
+
+  .district-list button:hover {
+    border-color: rgba(255, 183, 77, 0.42);
+    background: rgba(255, 183, 77, 0.08);
+    transform: translateY(-1px);
+  }
+
+  .district-list b,
+  .district-list small {
+    display: block;
+  }
+
+  .district-list b {
+    font-size: 0.86rem;
+    overflow-wrap: anywhere;
+  }
+
+  .district-list small {
+    margin-top: 3px;
+    color: var(--muted);
+  }
+
+  .district-list strong {
+    color: var(--yellow);
+    flex: 0 0 auto;
+    min-width: 3ch;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .results-panel {
+    padding: 17px;
+  }
+
+  .results-header {
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+
+  .cases-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .filter-menu {
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  .filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-raised);
+    color: var(--text);
+    padding: 0 13px;
+    cursor: pointer;
+    font-weight: 850;
+    box-shadow: 0 12px 28px rgba(2, 6, 23, 0.12);
+  }
+
+  .filter-toggle:hover,
+  .filter-toggle[aria-expanded="true"] {
+    border-color: rgba(66, 165, 245, 0.52);
+    background: linear-gradient(135deg, rgba(66, 165, 245, 0.18), rgba(38, 198, 218, 0.12));
+  }
+
+  .filter-dropdown {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    z-index: 8;
+    display: grid;
+    gap: 12px;
+    width: min(340px, calc(100vw - 36px));
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--panel-solid), transparent 4%);
+    box-shadow: var(--shadow);
+    padding: 14px;
+  }
+
+  .filter-dropdown[hidden] {
+    display: none;
+  }
+
+  .filter-dropdown label {
+    margin-bottom: 0;
+  }
+
+  .case-card {
+    display: grid;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-raised);
+    padding: 14px;
+    border-left: 3px solid #42a5f5;
+  }
+
+  .case-card:nth-child(4n + 2) {
+    border-left-color: #ffb74d;
+  }
+
+  .case-card:nth-child(4n + 3) {
+    border-left-color: #ab47bc;
+  }
+
+  .case-card:nth-child(4n + 4) {
+    border-left-color: #26c6da;
+  }
+
+  .case-card h3 {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .case-card p {
+    margin: 4px 0 0;
+    color: var(--muted);
+  }
+
+  .case-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .species-line {
+    margin-top: 0;
+    color: var(--text);
+    font-size: 0.86rem;
+    line-height: 1.45;
+  }
+
+  .species-line b {
+    color: var(--yellow);
+  }
+
+  .case-tags span {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--text);
+    background: rgba(92, 107, 192, 0.16);
+    padding: 5px 8px;
+    font-size: 0.75rem;
+    font-weight: 750;
+  }
+
+  .charges {
+    line-height: 1.5;
+  }
+
+  .empty {
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    color: var(--muted);
+    padding: 22px;
+    text-align: center;
+  }
+
+  @media (max-width: 1100px) {
+    .app-shell {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+      position: static;
+      height: auto;
+      overflow: visible;
+      padding-right: 0;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .brand {
+      grid-column: 1 / -1;
+    }
+
+    .hero-grid {
+      grid-template-columns: 1fr;
+      min-width: 0;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .sidebar {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body[data-page="data"] .sidebar {
+      grid-template-columns: 1fr;
+    }
+
+    .category-panel {
+      grid-column: 1 / -1;
+    }
+
+    body[data-page="data"] .bar-row {
+      grid-template-columns: minmax(128px, 0.58fr) minmax(160px, 1fr) 42px;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .app-shell {
+      padding: 10px;
+    }
+
+    .sidebar {
+      grid-template-columns: 1fr;
+    }
+
+    .topbar {
+      position: static;
+      display: grid;
+      grid-template-columns: 1fr auto;
+    }
+
+    .search-wrap {
+      grid-column: 1 / -1;
+    }
+
+    .page-tabs {
+      grid-column: 1 / -1;
+    }
+
+    .mode-tabs {
+      grid-column: 1 / 2;
+    }
+
+    .search-popover {
+      position: static;
+    }
+
+    .search-popover-header {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .search-popover-header .result-tools {
+      grid-column: 1 / -1;
+      justify-content: space-between;
+    }
+
+    .hero-grid,
+    .globe-stage,
+    .globe-stage canvas {
+      min-width: 0;
+      width: 100%;
+      height: 520px;
+      min-height: 520px;
+    }
+
+    .hero-grid {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-grid {
+      grid-template-columns: 1fr;
+    }
+
+    body[data-page="data"] .bar-row {
+      grid-template-columns: 1fr 72px 38px;
+      gap: 8px;
+      font-size: 0.74rem;
+    }
+
+    .globe-header {
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .metric-pill {
+      max-width: 170px;
+    }
+  }
+</style>
+
+<style is:global>
+  .meta-grid div {
+    display: grid;
+    min-width: 0;
+    min-height: 66px;
+    place-items: center;
+    align-content: center;
+    padding: 10px;
+    text-align: center;
+  }
+
+  .meta-grid dt,
+  .meta-grid dd {
+    width: 100%;
+    text-align: center;
+  }
+
+  .meta-grid dd {
+    margin: 4px 0 0;
+    margin-inline: 0;
+    max-width: 100%;
+    font-size: clamp(0.94rem, 1.7vw, 1.08rem);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.14;
+    overflow-wrap: anywhere;
+  }
+
+  mark {
+    color: inherit;
+    background: rgba(255, 183, 77, 0.24);
+    border-radius: 3px;
+    padding: 0 2px;
+  }
+
+  .timeline button {
+    display: grid;
+    grid-template-rows: 24px 144px 34px;
+    align-items: end;
+    gap: 7px;
+    height: 100%;
+    min-width: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .timeline span {
+    display: block;
+    width: 100%;
+    height: var(--h);
+    min-height: 18px;
+    align-self: end;
+    border-radius: 8px 8px 3px 3px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bar, #42a5f5), white 18%), var(--bar, #42a5f5) 48%, color-mix(in srgb, var(--bar, #42a5f5), #1f2937 26%));
+    box-shadow: 0 10px 22px color-mix(in srgb, var(--bar, #42a5f5), transparent 72%);
+    transition: filter 160ms ease, transform 160ms ease;
+  }
+
+  .timeline button:hover span {
+    filter: saturate(1.15) brightness(1.08);
+    transform: translateY(-2px);
+  }
+
+  .timeline em {
+    align-self: end;
+    color: var(--muted);
+    font-size: 0.62rem;
+    font-style: normal;
+    font-weight: 900;
+    line-height: 1;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+
+  .timeline button:hover em {
+    opacity: 1;
+  }
+
+  .timeline small {
+    color: var(--muted);
+    justify-self: center;
+    font-size: 0.62rem;
+    font-weight: 800;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+  }
+
+  .bar-row {
+    display: grid;
+    grid-template-columns: minmax(96px, 1fr) 86px 34px;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+  }
+
+  .bar-row span {
+    color: var(--muted);
+  }
+
+  .bar-row div {
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(170, 179, 202, 0.16);
+  }
+
+  .bar-row i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--bar, #42a5f5), color-mix(in srgb, var(--bar, #42a5f5), white 24%));
+  }
+
+  .bar-row b {
+    text-align: right;
+  }
+
+  .district-list button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-raised);
+    color: var(--text);
+    padding: 10px 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+  }
+
+  .district-list button:hover {
+    border-color: rgba(255, 183, 77, 0.42);
+    background: rgba(255, 183, 77, 0.08);
+    transform: translateY(-1px);
+  }
+
+  .district-list b,
+  .district-list small {
+    display: block;
+  }
+
+  .district-list b {
+    font-size: 0.86rem;
+  }
+
+  .district-list small {
+    margin-top: 3px;
+    color: var(--muted);
+  }
+
+  .district-list strong {
+    color: var(--yellow);
+  }
+
+  .case-card {
+    display: grid;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-raised);
+    padding: 14px;
+    border-left: 3px solid #42a5f5;
+  }
+
+  .case-card:nth-child(4n + 2) {
+    border-left-color: #ffb74d;
+  }
+
+  .case-card:nth-child(4n + 3) {
+    border-left-color: #ab47bc;
+  }
+
+  .case-card:nth-child(4n + 4) {
+    border-left-color: #26c6da;
+  }
+
+  .case-card h3 {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.25;
+  }
+
+  .case-card p {
+    margin: 4px 0 0;
+    color: var(--muted);
+  }
+
+  .case-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .case-tags span {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--text);
+    background: rgba(92, 107, 192, 0.16);
+    padding: 5px 8px;
+    font-size: 0.75rem;
+    font-weight: 750;
+  }
+
+  .charges {
+    line-height: 1.5;
+  }
+
+  .empty {
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    color: var(--muted);
+    padding: 22px;
+    text-align: center;
+  }
+
+  body[data-page="data"] .workbook-panel .meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, 76px);
+    gap: 10px;
+  }
+
+  body[data-page="data"] .workbook-panel .meta-grid div {
+    box-sizing: border-box;
+    min-height: 76px;
+    border: 1px solid rgba(198, 208, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    padding: 10px;
+  }
+
+  body[data-page="data"] .workbook-panel .meta-grid dt {
+    font-size: 0.9rem;
+  }
+
+  body[data-page="data"] .workbook-panel .meta-grid dd {
+    font-size: clamp(1.08rem, 1.45vw, 1.36rem);
+  }
+
+  body[data-page="data"] .export-panel .export-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  body[data-page="data"] .export-panel .panel-copy {
+    margin-bottom: 10px;
+    font-size: 0.82rem;
+  }
+
+  body[data-page="data"] .export-panel .export-button {
+    min-height: 58px;
+    padding: 10px 14px;
+    font-size: 0.88rem;
+    white-space: nowrap;
+  }
+
+  body[data-page="data"] .category-panel {
+    min-height: 0;
+    padding-bottom: 15px;
+  }
+
+  body[data-page="data"] .category-panel .bars {
+    width: min(100%, 1380px);
+    margin: 0 auto;
+    gap: 12px;
+  }
+
+  body[data-page="data"] .category-panel .bar-row {
+    grid-template-columns: minmax(220px, 0.36fr) minmax(560px, 1fr) 54px;
+    gap: 18px;
+    font-size: 0.86rem;
+  }
+
+  body[data-page="data"] .category-panel .bar-row div {
+    height: 13px;
+  }
+
+  body[data-page="data"] .category-panel .bar-row b {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  @media (max-width: 1100px) {
+    body[data-page="data"] .export-panel .export-actions {
+      grid-template-columns: 1fr;
+    }
+
+    body[data-page="data"] .category-panel .bar-row {
+      grid-template-columns: minmax(150px, 0.45fr) minmax(220px, 1fr) 46px;
+    }
+  }
+</style>

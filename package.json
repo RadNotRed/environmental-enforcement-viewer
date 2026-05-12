@@ -1,0 +1,33 @@
+{
+  "name": "new-project",
+  "module": "src/pages/index.astro",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev --host 127.0.0.1",
+    "build": "astro build",
+    "preview": "astro preview --host 127.0.0.1",
+    "import:data": "bun run scripts/import-xlsx.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@astrojs/node": "^10.1.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/d3-geo": "^3.1.0",
+    "@types/topojson-client": "^3.1.5",
+    "astro": "^6.3.1",
+    "better-sqlite3": "^12.9.0",
+    "d3-geo": "^3.1.1",
+    "lucide-astro": "^0.556.0",
+    "three": "^0.184.0",
+    "topojson-client": "^3.1.0",
+    "us-atlas": "^3.0.1",
+    "world-atlas": "^2.0.2",
+    "xlsx": "^0.18.5"
+  }
+}
