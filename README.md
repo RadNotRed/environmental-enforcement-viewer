@@ -30,7 +30,7 @@
 Environmental Enforcement Atlas turns the workbook at:
 
 ```text
-C:\Users\rad\Downloads\Completed Database with Missing Cases Listed.xlsx
+Completed Database with Missing Cases Listed.xlsx
 ```
 
 into a local SQLite database and an interactive web app for exploring case geography, court districts, countries, penalties, incarceration, species, and notes.
